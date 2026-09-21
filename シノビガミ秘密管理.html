@@ -79,6 +79,7 @@
     height: auto;
     background: white;
     margin: 0 auto;
+    cursor: pointer;
   }
   .small {
     font-size: 12px;
@@ -242,6 +243,7 @@
 
   <div id="preview" class="draggable-section" data-section-id="matrixPreview" draggable="true">
     <canvas id="matrixCanvas"></canvas>
+    <div class="small">感情共有で連動して変化したマスは、1.5秒ほど淡い黄色で強調表示されます。</div>
   </div>
 
 </div>
@@ -286,7 +288,18 @@ let state = {
   emotions: [],
   imageTitleMode: "free",
   imageTitle: "タイトルを入力",
-  cycleScene: "1サイクル1シーン目"
+  cycleScene: "1サイクル1シーン目",
+  uiSelections: {
+    secretSelect: "",
+    emotionFrom: "",
+    emotionTo: "",
+    emotionPositive1: "",
+    emotionNegative1: "",
+    emotionPositive2: "",
+    emotionNegative2: "",
+    cycleSelect: "1",
+    sceneSelect: "1"
+  }
 };
 
 function normalizePlayerCount() {
@@ -412,7 +425,20 @@ function recordHistory() {
 }
 
 function restoreState(snapshot) {
+  const currentUiSelections = {};
+  const selectionIds = [
+    "secretSelect", "emotionFrom", "emotionTo",
+    "emotionPositive1", "emotionNegative1",
+    "emotionPositive2", "emotionNegative2",
+    "cycleSelect", "sceneSelect"
+  ];
+  for (const id of selectionIds) {
+    const element = document.getElementById(id);
+    if (element && element.value !== "") currentUiSelections[id] = element.value;
+  }
+
   state = cloneState(snapshot);
+  state.uiSelections = { ...(state.uiSelections || {}), ...currentUiSelections };
   normalizeLayoutOrder();
   normalizePlayerCount();
   ensurePlayerDefaults();
@@ -487,26 +513,52 @@ function normalizeEmotions() {
   );
 }
 
-function recalculateKnowledge() {
-  normalizeDirectMatrix();
-  normalizeEmotions();
-  state.matrix = {};
-  for (const person of playerIds) {
-    state.matrix[person] = {};
+function normalizeMatrix() {
+  if (!state.matrix) state.matrix = {};
+  for (const person of allPlayerIds) {
+    if (!state.matrix[person]) state.matrix[person] = {};
     for (const secret of state.secrets) {
-      state.matrix[person][secret] = !!state.directMatrix[person][secret] || isPublic(secret);
-    }
-  }
-  // 情報共有は、感情を持つ相手が「直接」獲得した情報について一度だけ発生する。
-  for (const emotion of state.emotions) {
-    const source = emotion.from;
-    const target = emotion.to;
-    for (const secret of state.secrets) {
-      if (state.directMatrix[target][secret] && state.secretOwners[secret] !== source) {
-        state.matrix[source][secret] = true;
+      if (typeof state.matrix[person][secret] !== "boolean") {
+        state.matrix[person][secret] = !!state.directMatrix[person][secret] || isPublic(secret);
       }
     }
   }
+}
+
+function recalculateKnowledge() {
+  normalizeDirectMatrix();
+  normalizeEmotions();
+  normalizeMatrix();
+
+  // 知識は一度得たら保持します。
+  // 感情共有は「共有元が○になった瞬間に、共有先へ○を渡す」処理であり、
+  // 共有元が×になったことによって、共有先を×には戻しません。
+  // そのため、ここでは感情共有を再計算して既存の○を消す処理は行いません。
+  for (const person of playerIds) {
+    for (const secret of state.secrets) {
+      if (state.directMatrix[person][secret] || isPublic(secret)) {
+        state.matrix[person][secret] = true;
+      }
+    }
+  }
+}
+
+function propagateSharedKnowledge(person, secret) {
+  const changed = new Set();
+  if (!state.matrix[person] || !state.matrix[person][secret]) return changed;
+
+  // emotion.to が現在その秘密を知ったとき、emotion.from にだけ○を渡します。
+  // ×は絶対に連動させません。
+  for (const emotion of state.emotions) {
+    if (emotion.to !== person) continue;
+    const receiver = emotion.from;
+    if (receiver === person || state.secretOwners[secret] === receiver) continue;
+    if (!state.matrix[receiver][secret]) {
+      state.matrix[receiver][secret] = true;
+      changed.add(makeCellKey(receiver, secret));
+    }
+  }
+  return changed;
 }
 
 
@@ -540,6 +592,7 @@ function loadState() {
     if (loaded.matrix) state.matrix = loaded.matrix;
     if (loaded.directMatrix) state.directMatrix = loaded.directMatrix;
     if (Array.isArray(loaded.emotions)) state.emotions = loaded.emotions;
+    if (loaded.uiSelections && typeof loaded.uiSelections === "object") state.uiSelections = { ...state.uiSelections, ...loaded.uiSelections };
     ensurePlayerDefaults();
     normalizeDirectMatrix();
     normalizeEmotions();
@@ -611,7 +664,13 @@ function readEmotionSelect(positiveId, negativeId) {
 function enforceEmotionExclusivity(selectedId, otherId) {
   const selected = document.getElementById(selectedId);
   const other = document.getElementById(otherId);
-  if (selected.value) other.value = "";
+  if (selected.value) {
+    other.value = "";
+    if (!state.uiSelections) state.uiSelections = {};
+    state.uiSelections[otherId] = "";
+    state.uiSelections[selectedId] = selected.value;
+    saveState();
+  }
 }
 
 function getSortedEmotions() {
@@ -698,6 +757,44 @@ function addEmotionLink(from, to, type, polarity) {
   return "登録";
 }
 
+function captureUiSelections() {
+  if (!state.uiSelections) state.uiSelections = {};
+  const ids = [
+    "secretSelect", "emotionFrom", "emotionTo",
+    "emotionPositive1", "emotionNegative1",
+    "emotionPositive2", "emotionNegative2",
+    "cycleSelect", "sceneSelect"
+  ];
+  for (const id of ids) {
+    const element = document.getElementById(id);
+    if (element && element.value !== "") state.uiSelections[id] = element.value;
+  }
+}
+
+function saveUiSelections() {
+  captureUiSelections();
+  saveState();
+}
+
+function setupSelectMemory() {
+  const ids = [
+    "secretSelect", "emotionFrom", "emotionTo",
+    "emotionPositive1", "emotionNegative1",
+    "emotionPositive2", "emotionNegative2",
+    "cycleSelect", "sceneSelect"
+  ];
+  for (const id of ids) {
+    const element = document.getElementById(id);
+    if (!element || element.dataset.selectionMemoryBound) continue;
+    element.dataset.selectionMemoryBound = "true";
+    element.addEventListener("change", () => {
+      if (!state.uiSelections) state.uiSelections = {};
+      state.uiSelections[id] = element.value;
+      saveState();
+    });
+  }
+}
+
 function buildControls() {
   document.getElementById("playerCount").value = state.playerCount;
   const pcInputs = document.getElementById("pcInputs");
@@ -717,15 +814,38 @@ function buildControls() {
   }
 
   const secretSelect = document.getElementById("secretSelect");
+  const selectedSecret = (state.uiSelections && state.uiSelections.secretSelect) || secretSelect.value;
   secretSelect.innerHTML = "";
-  for (const secret of getVisibleSecrets()) {
+  const visibleSecrets = getVisibleSecrets();
+  for (const secret of visibleSecrets) {
     const option = document.createElement("option");
     option.value = secret;
     option.textContent = secretDisplayName(secret) + (isPublic(secret) ? " [全体公開]" : "");
     secretSelect.appendChild(option);
   }
+  if (visibleSecrets.includes(selectedSecret)) {
+    secretSelect.value = selectedSecret;
+  } else if (visibleSecrets.length) {
+    secretSelect.value = visibleSecrets[0];
+    if (!state.uiSelections) state.uiSelections = {};
+    state.uiSelections.secretSelect = visibleSecrets[0];
+  }
 
   buildEmotionControls();
+
+  const selectionIds = [
+    "emotionFrom", "emotionTo",
+    "emotionPositive1", "emotionNegative1",
+    "emotionPositive2", "emotionNegative2"
+  ];
+  for (const id of selectionIds) {
+    const select = document.getElementById(id);
+    const savedValue = state.uiSelections && state.uiSelections[id];
+    if (savedValue && [...select.options].some(option => option.value === savedValue)) {
+      select.value = savedValue;
+    }
+  }
+
   renderEmotionList();
   updateReverseEmotionVisibility();
 }
@@ -786,6 +906,43 @@ function drawCenteredText(ctx, text, x, y, w, h, font) {
 }
 
 let lastLayout = null;
+let highlightedCells = new Set();
+let highlightTimer = null;
+
+function makeCellKey(person, secret) {
+  return `${person}|||${secret}`;
+}
+
+function getChangedKnowledgeCells(beforeMatrix, afterMatrix, excludedKey = null) {
+  const changed = new Set();
+  for (const person of playerIds) {
+    for (const secret of getVisibleSecrets()) {
+      const before = !!(beforeMatrix && beforeMatrix[person] && beforeMatrix[person][secret]);
+      const after = !!(afterMatrix && afterMatrix[person] && afterMatrix[person][secret]);
+      const key = makeCellKey(person, secret);
+      if (before !== after && key !== excludedKey) {
+        changed.add(key);
+      }
+    }
+  }
+  return changed;
+}
+
+function showLinkedHighlights(cells) {
+  if (highlightTimer) {
+    clearTimeout(highlightTimer);
+    highlightTimer = null;
+  }
+  highlightedCells = new Set(cells);
+  if (!highlightedCells.size) return;
+
+  makeMatrixImage();
+  highlightTimer = setTimeout(() => {
+    highlightedCells.clear();
+    highlightTimer = null;
+    makeMatrixImage();
+  }, 1500);
+}
 
 function getImageTitle() {
   if (state.imageTitleMode === "cycle") {
@@ -813,8 +970,14 @@ function populateCycleSceneSelects() {
     sceneSelect.appendChild(option);
   }
   const match = /^(\d+)サイクル(\d+)シーン目$/.exec(state.cycleScene);
-  cycleSelect.value = match ? match[1] : "1";
-  sceneSelect.value = match ? match[2] : "1";
+  const savedCycle = state.uiSelections && state.uiSelections.cycleSelect;
+  const savedScene = state.uiSelections && state.uiSelections.sceneSelect;
+  cycleSelect.value = savedCycle && [...cycleSelect.options].some(option => option.value === savedCycle)
+    ? savedCycle
+    : (match ? match[1] : "1");
+  sceneSelect.value = savedScene && [...sceneSelect.options].some(option => option.value === savedScene)
+    ? savedScene
+    : (match ? match[2] : "1");
 }
 
 function refreshImageTitleControls() {
@@ -938,6 +1101,11 @@ function makeMatrixImage() {
     for (const d of secretData) {
       ctx.strokeRect(colX, y, d.width, cellHeight);
 
+      if (highlightedCells.has(makeCellKey(person, d.secret))) {
+        ctx.fillStyle = "#fff3a3";
+        ctx.fillRect(colX + 1, y + 1, d.width - 2, cellHeight - 2);
+      }
+
       let mark;
       if (state.secretOwners[d.secret] === person) {
         mark = "－";
@@ -991,11 +1159,23 @@ function makeMatrixImage() {
   return canvas;
 }
 
-function refresh() {
+function refresh(preserveUiSelections = true) {
+  // 画面を再構築しても、ユーザーが見ていたスクロール位置を維持します。
+  // Undo/Redoや感情登録などでrefresh()が呼ばれてもページ先頭へ戻りません。
+  const scrollX = window.scrollX;
+  const scrollY = window.scrollY;
+
+  // 通常の更新では、現在のプルダウン位置を退避します。
+  // 初期化時だけはこれを行わず、初期値をそのまま表示します。
+  if (preserveUiSelections) captureUiSelections();
   buildControls();
   refreshImageTitleControls();
   makeMatrixImage();
   applyLayoutOrder();
+
+  // DOMの再構築・canvas更新後に元の位置へ戻します。
+  window.scrollTo(scrollX, scrollY);
+  requestAnimationFrame(() => window.scrollTo(scrollX, scrollY));
 }
 
 function setPlayerCount(nextCount) {
@@ -1059,12 +1239,29 @@ document.getElementById("matrixCanvas").addEventListener("click", event => {
     return;
   }
 
+  const beforeMatrix = cloneState(state.matrix);
+  const currentlyKnown = !!state.matrix[person][secret];
   recordHistory();
-  state.directMatrix[person][secret] = !state.directMatrix[person][secret];
-  recalculateKnowledge();
+
+  // マトリクス上の○／×を直接操作します。
+  // ○にした瞬間だけ感情共有を発生させ、共有先へ○を渡します。
+  // ×にしたときは、誰かのマスを×にするだけで、他のマスには連動しません。
+  const desiredKnown = !currentlyKnown;
+  state.directMatrix[person][secret] = desiredKnown;
+  state.matrix[person][secret] = desiredKnown;
+
+  const linkedChanges = desiredKnown
+    ? propagateSharedKnowledge(person, secret)
+    : new Set();
+
   saveState();
   refresh();
-  setStatus(`${state.playerNames[person]} × 「${secretDisplayName(secret)}」を ${state.directMatrix[person][secret] ? "○" : "×"} に変更しました。`);
+  showLinkedHighlights(linkedChanges);
+  if (linkedChanges.size) {
+    setStatus(`感情共有で${linkedChanges.size}個のマスが連動して変化しました。`);
+  } else {
+    setStatus(`${state.playerNames[person]} × 「${secretDisplayName(secret)}」を ${state.directMatrix[person][secret] ? "○" : "×"} に変更しました。`);
+  }
 });
 
 document.getElementById("applyNames").addEventListener("click", () => {
@@ -1222,11 +1419,21 @@ document.getElementById("addEmotion").addEventListener("click", () => {
     result2 = addEmotionLink(to, from, second.type, second.polarity);
   }
   recalculateKnowledge();
+  const linkedChanges = new Set();
+  for (const secret of state.secrets) {
+    if (state.matrix[to] && state.matrix[to][secret]) {
+      for (const cell of propagateSharedKnowledge(to, secret)) linkedChanges.add(cell);
+    }
+    if (mutual && state.matrix[from] && state.matrix[from][secret]) {
+      for (const cell of propagateSharedKnowledge(from, secret)) linkedChanges.add(cell);
+    }
+  }
   saveState();
   refresh();
+  showLinkedHighlights(linkedChanges);
   setStatus(mutual
-    ? `相互の感情を${result1 === "更新" || result2 === "更新" ? "更新" : "登録"}しました。情報共有も再計算しました。`
-    : `一方通行の感情を${result1}しました。情報共有も再計算しました。`);
+    ? `相互の感情を${result1 === "更新" || result2 === "更新" ? "更新" : "登録"}しました。情報共有で○になったマスを反映しました。`
+    : `一方通行の感情を${result1}しました。情報共有で○になったマスを反映しました。`);
 });
 
 document.querySelectorAll('input[name="imageTitleMode"]').forEach(radio => {
@@ -1339,6 +1546,7 @@ document.getElementById("importData").addEventListener("change", event => {
 
       recordHistory();
       state = imported;
+      if (!state.uiSelections) state.uiSelections = {};
 
       normalizePlayerCount();
       ensurePlayerDefaults();
@@ -1402,23 +1610,37 @@ document.getElementById("resetData").addEventListener("click", () => {
     publicSecrets: [],
     matrix: {},
     directMatrix: {},
-    emotions: [],
+      emotions: [],
     imageTitleMode: "free",
     imageTitle: "タイトルを入力",
-    cycleScene: "1サイクル1シーン目"
+    cycleScene: "1サイクル1シーン目",
+    uiSelections: {
+      secretSelect: "PC1の秘密",
+      emotionFrom: "PC1",
+      emotionTo: "PC1",
+      emotionPositive1: "",
+      emotionNegative1: "",
+      emotionPositive2: "",
+      emotionNegative2: "",
+      cycleSelect: "1",
+      sceneSelect: "1"
+    }
   };
 
   normalizePlayerCount();
   ensurePlayerDefaults();
   makeInitialMatrix();
   saveState();
-  refresh();
+  // 初期化時は、直前まで選んでいたプルダウンを退避せず、
+  // state.uiSelections に指定した初期位置（各プルダウンの先頭）を表示します。
+  refresh(false);
   setStatus("初期状態に戻しました。");
 });
 
 loadState();
 refresh();
 setupSectionDragAndDrop();
+setupSelectMemory();
 resetHistory();
 </script>
 </body>
