@@ -26,10 +26,29 @@
     padding: 16px;
     margin-bottom: 16px;
   }
-  .draggable-section { cursor: grab; }
+  .draggable-section { position: relative; }
   .draggable-section.dragging { opacity: 0.45; }
-  .draggable-section > * { cursor: auto; }
-  .draggable-section > h2 { cursor: grab; }
+  .drag-handle {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: 1px solid #bbb;
+    border-radius: 4px;
+    background: #f5f5f5;
+    color: #666;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: grab;
+    user-select: none;
+    font-size: 18px;
+    line-height: 1;
+  }
+  .drag-handle:active { cursor: grabbing; }
+  .draggable-section > h2 { padding-left: 34px; }
   .row {
     display: flex;
     flex-wrap: wrap;
@@ -86,12 +105,19 @@
     color: #666;
   }
   .emotion-grid {
-    display: grid;
-    grid-template-columns: max-content max-content;
-    gap: 8px;
-    justify-content: start;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 18px;
     margin-bottom: 10px;
   }
+  .emotion-grid label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+  .emotion-grid select { max-width: 100%; }
   .emotion-list {
     margin-top: 12px;
     border-top: 1px solid #ddd;
@@ -120,8 +146,20 @@
   .emotion-direction { margin: 0; }
   .emotion-direction label { display: block; margin-bottom: 4px; }
   @media (max-width: 700px) {
+    body { padding: 10px; }
+    .panel { padding: 12px; }
+    .drag-handle { top: 6px; left: 6px; }
+    .draggable-section > h2 { padding-left: 32px; }
     .pc-grid { grid-template-columns: 1fr; }
-    input[type="text"] { min-width: 140px; width: 100%; }
+    input[type="text"] { min-width: 0; width: 100%; }
+    select, input[type="number"] { max-width: 100%; }
+    .emotion-grid { flex-direction: column; align-items: flex-start; gap: 8px; }
+    .emotion-grid label { width: 100%; }
+    .emotion-direction-row { flex-direction: column; }
+    .emotion-direction { width: 100%; }
+    .emotion-direction select { max-width: 100%; }
+    .row > label { max-width: 100%; }
+    .row > label select { max-width: 100%; }
   }
 </style>
 </head>
@@ -132,6 +170,7 @@
   <h1>秘密管理マトリクス</h1>
 
   <div class="panel draggable-section" data-section-id="pcSettings" draggable="true">
+    <span class="drag-handle" draggable="true" title="ここをつかんで表示順を変更">⠿</span>
     <h2>PC設定</h2>
     <div class="row">
       <label>PC人数：
@@ -147,6 +186,7 @@
   </div>
 
   <div class="panel draggable-section" data-section-id="secretManagement" draggable="true">
+    <span class="drag-handle" draggable="true" title="ここをつかんで表示順を変更">⠿</span>
     <h2>秘密を追加・管理</h2>
     <div class="row">
       <input type="text" id="newSecret" placeholder="秘密の名前">
@@ -160,14 +200,19 @@
       <label>秘密：
         <select id="secretSelect"></select>
       </label>
-      <button id="publicButton">全体公開にする</button>
-      <button id="privateButton">全体公開を解除</button>
+      <button id="publicButton">全体公開する</button>
     </div>
+    <div class="small">全体公開すると全員が○になります。必要ならUndoで公開前の状態に戻せます。</div>
     <div class="small">個別の○／×は、下のマトリクスをクリックして変更します。</div>
   </div>
 
   <div class="panel draggable-section" data-section-id="emotionManagement" draggable="true">
+    <span class="drag-handle" draggable="true" title="ここをつかんで表示順を変更">⠿</span>
     <h2>感情を管理</h2>
+    <div class="row">
+      <label><input type="checkbox" id="autoShareKnowledge" checked> 感情による情報共有を自動で行う</label>
+    </div>
+    <div class="small">OFFにしている間は、マトリックスを○にしても感情共有は発生しません。</div>
     <div class="emotion-grid">
       <label>感情を持つ側：
         <select id="emotionFrom"></select>
@@ -196,11 +241,12 @@
     <div class="row">
       <button id="addEmotion">感情を登録</button>
     </div>
-    <div class="small">相互の場合も、二人の感情の種類・＋／－は別々に設定できます。</div>
+    <div class="small"></div>
     <div class="emotion-list" id="emotionList"></div>
   </div>
 
   <div class="panel draggable-section" data-section-id="imageTitle" draggable="true">
+    <span class="drag-handle" draggable="true" title="ここをつかんで表示順を変更">⠿</span>
     <h2>画像タイトル</h2>
     <div class="row">
       <label>
@@ -225,6 +271,7 @@
   </div>
 
   <div class="panel draggable-section" data-section-id="cocofolia" draggable="true">
+    <span class="drag-handle" draggable="true" title="ここをつかんで表示順を変更">⠿</span>
     <h2>ココフォリア用</h2>
     <div class="row">
       <button id="undoButton" disabled>Undo</button>
@@ -242,6 +289,7 @@
   </div>
 
   <div id="preview" class="draggable-section" data-section-id="matrixPreview" draggable="true">
+    <span class="drag-handle" draggable="true" title="ここをつかんで表示順を変更">⠿</span>
     <canvas id="matrixCanvas"></canvas>
     <div class="small">感情共有で連動して変化したマスは、1.5秒ほど淡い黄色で強調表示されます。</div>
   </div>
@@ -283,6 +331,7 @@ let state = {
     "PC6の秘密": "PC6"
   },
   publicSecrets: [],
+  autoShareKnowledge: true,
   matrix: {},
   directMatrix: {},
   emotions: [],
@@ -372,7 +421,7 @@ function setupSectionDragAndDrop() {
 
   for (const section of document.querySelectorAll(".draggable-section")) {
     section.addEventListener("dragstart", event => {
-      if (event.target.closest("input, select, button, label, canvas")) {
+      if (!event.target.closest(".drag-handle")) {
         event.preventDefault();
         return;
       }
@@ -511,6 +560,11 @@ function normalizeEmotions() {
     e && allPlayerIds.includes(e.from) && allPlayerIds.includes(e.to) && e.from !== e.to &&
     typeof e.type === "string" && typeof e.polarity === "string"
   );
+  // 旧版に残っている shareKnowledge は無視します。
+  // 情報共有のON/OFFは、感情ごとではなく全体設定で管理します。
+  for (const emotion of state.emotions) {
+    delete emotion.shareKnowledge;
+  }
 }
 
 function normalizeMatrix() {
@@ -545,6 +599,7 @@ function recalculateKnowledge() {
 
 function propagateSharedKnowledge(person, secret) {
   const changed = new Set();
+  if (!state.autoShareKnowledge) return changed;
   if (!state.matrix[person] || !state.matrix[person][secret]) return changed;
 
   // emotion.to が現在その秘密を知ったとき、emotion.from にだけ○を渡します。
@@ -586,6 +641,7 @@ function loadState() {
     if (Array.isArray(loaded.secrets)) state.secrets = loaded.secrets;
     if (loaded.secretOwners) state.secretOwners = loaded.secretOwners;
     if (Array.isArray(loaded.publicSecrets)) state.publicSecrets = loaded.publicSecrets;
+    if (typeof loaded.autoShareKnowledge === "boolean") state.autoShareKnowledge = loaded.autoShareKnowledge;
     if (loaded.imageTitleMode === "cycle" || loaded.imageTitleMode === "free") state.imageTitleMode = loaded.imageTitleMode;
     if (typeof loaded.imageTitle === "string" && loaded.imageTitle.trim()) state.imageTitle = loaded.imageTitle;
     if (typeof loaded.cycleScene === "string" && loaded.cycleScene.trim()) state.cycleScene = loaded.cycleScene;
@@ -594,6 +650,7 @@ function loadState() {
     if (Array.isArray(loaded.emotions)) state.emotions = loaded.emotions;
     if (loaded.uiSelections && typeof loaded.uiSelections === "object") state.uiSelections = { ...state.uiSelections, ...loaded.uiSelections };
     ensurePlayerDefaults();
+    if (typeof state.autoShareKnowledge !== "boolean") state.autoShareKnowledge = true;
     normalizeDirectMatrix();
     normalizeEmotions();
     normalizeCycleScene();
@@ -713,7 +770,7 @@ function renderEmotionList() {
       recalculateKnowledge();
       saveState();
       refresh();
-      setStatus("感情を削除しました。共有された情報も再計算しました。");
+      setStatus("感情を削除しました。すでに共有された情報は保持されます。");
     });
     item.append(from, arrow, to, feeling, remove);
     list.appendChild(item);
@@ -751,6 +808,7 @@ function addEmotionLink(from, to, type, polarity) {
   if (existing) {
     existing.type = type;
     existing.polarity = polarity;
+    delete existing.shareKnowledge;
     return "更新";
   }
   state.emotions.push({ from, to, type, polarity });
@@ -767,7 +825,7 @@ function captureUiSelections() {
   ];
   for (const id of ids) {
     const element = document.getElementById(id);
-    if (element && element.value !== "") state.uiSelections[id] = element.value;
+    if (element) state.uiSelections[id] = element.value;
   }
 }
 
@@ -820,7 +878,7 @@ function buildControls() {
   for (const secret of visibleSecrets) {
     const option = document.createElement("option");
     option.value = secret;
-    option.textContent = secretDisplayName(secret) + (isPublic(secret) ? " [全体公開]" : "");
+    option.textContent = secretDisplayName(secret);
     secretSelect.appendChild(option);
   }
   if (visibleSecrets.includes(selectedSecret)) {
@@ -845,6 +903,7 @@ function buildControls() {
       select.value = savedValue;
     }
   }
+  document.getElementById("autoShareKnowledge").checked = state.autoShareKnowledge !== false;
 
   renderEmotionList();
   updateReverseEmotionVisibility();
@@ -1030,7 +1089,20 @@ function makeMatrixImage() {
   const matrixHeight = headerHeight + playerIds.length * cellHeight;
   const emotionRowHeight = 32;
   const visibleEmotions = getVisibleEmotions();
-  const emotionHeight = 55 + visibleEmotions.length * emotionRowHeight;
+  const emotionFont = `16px "Noto Sans JP", "Yu Gothic", Meiryo, sans-serif`;
+  const emotionTexts = visibleEmotions.map(emotion =>
+    `${state.playerNames[emotion.from]} → ${state.playerNames[emotion.to]}　${emotionLabel(emotion)}`
+  );
+  const maxEmotionTextWidth = emotionTexts.length
+    ? Math.max(...emotionTexts.map(text => textWidth(ctx, text, emotionFont)))
+    : 0;
+  // マトリックスが横に広いほど感情一覧も列数を増やし、画像の縦幅を抑えます。
+  // ただし読みやすさを優先して最大4列まで。
+  const emotionColumns = emotionTexts.length
+    ? Math.max(1, Math.min(4, Math.floor(matrixWidth / Math.max(240, maxEmotionTextWidth + 20))))
+    : 1;
+  const emotionRows = Math.max(1, Math.ceil(visibleEmotions.length / emotionColumns));
+  const emotionHeight = visibleEmotions.length ? 55 + emotionRows * emotionRowHeight : 55;
 
   lastLayout = { margin, titleHeight, nameWidth, headerHeight, cellHeight, secretData, startX: margin, startY: margin + titleHeight };
 
@@ -1144,15 +1216,20 @@ function makeMatrixImage() {
     ctx.fillStyle = "#666";
     ctx.fillText("登録されている感情はありません。", startX, emotionTop + 30);
   } else {
-    getSortedEmotions().filter(emotion =>
+    const sortedEmotions = getSortedEmotions().filter(emotion =>
       playerIds.includes(emotion.from) && playerIds.includes(emotion.to)
-    ).forEach((emotion, index) => {
-      const y = emotionTop + 30 + index * emotionRowHeight;
+    );
+    const emotionColumnWidth = matrixWidth / emotionColumns;
+    ctx.font = emotionFont;
+    ctx.fillStyle = "#222";
+    ctx.textAlign = "left";
+    sortedEmotions.forEach((emotion, index) => {
+      const column = Math.floor(index / emotionRows);
+      const row = index % emotionRows;
+      const x = startX + column * emotionColumnWidth;
+      const y = emotionTop + 30 + row * emotionRowHeight;
       const text = `${state.playerNames[emotion.from]} → ${state.playerNames[emotion.to]}　${emotionLabel(emotion)}`;
-      ctx.font = `16px "Noto Sans JP", "Yu Gothic", Meiryo, sans-serif`;
-      ctx.fillStyle = "#222";
-      ctx.textAlign = "left";
-      ctx.fillText(text, startX, y);
+      ctx.fillText(text, x, y);
     });
   }
 
@@ -1244,7 +1321,8 @@ document.getElementById("matrixCanvas").addEventListener("click", event => {
   recordHistory();
 
   // マトリクス上の○／×を直接操作します。
-  // ○にした瞬間だけ感情共有を発生させ、共有先へ○を渡します。
+  // ○にした瞬間だけ、現在の感情に基づく情報共有を発生させ、共有先へ○を渡します。
+  // 自動共有OFFなら、この共有処理は発生しません。
   // ×にしたときは、誰かのマスを×にするだけで、他のマスには連動しません。
   const desiredKnown = !currentlyKnown;
   state.directMatrix[person][secret] = desiredKnown;
@@ -1353,24 +1431,7 @@ document.getElementById("publicButton").addEventListener("click", () => {
 
   saveState();
   refresh();
-  setStatus("全体公開にしました。");
-});
-
-document.getElementById("privateButton").addEventListener("click", () => {
-  const secret = document.getElementById("secretSelect").value;
-
-  if (!isPublic(secret)) {
-    setStatus("この秘密は全体公開されていません。");
-    return;
-  }
-
-  recordHistory();
-  state.publicSecrets = state.publicSecrets.filter(s => s !== secret);
-
-  recalculateKnowledge();
-  saveState();
-  refresh();
-  setStatus("全体公開を解除しました。");
+  setStatus("全体公開しました。");
 });
 
 document.getElementById("mutualEmotion").addEventListener("change", updateReverseEmotionVisibility);
@@ -1386,6 +1447,16 @@ document.getElementById("emotionPositive2").addEventListener("change", () => {
 });
 document.getElementById("emotionNegative2").addEventListener("change", () => {
   enforceEmotionExclusivity("emotionNegative2", "emotionPositive2");
+});
+
+document.getElementById("autoShareKnowledge").addEventListener("change", () => {
+  recordHistory();
+  state.autoShareKnowledge = document.getElementById("autoShareKnowledge").checked;
+  saveState();
+  refresh();
+  setStatus(state.autoShareKnowledge
+    ? "感情による情報共有を自動で行います。"
+    : "感情による情報共有を停止しました。");
 });
 
 document.getElementById("addEmotion").addEventListener("click", () => {
@@ -1418,22 +1489,11 @@ document.getElementById("addEmotion").addEventListener("click", () => {
   if (mutual) {
     result2 = addEmotionLink(to, from, second.type, second.polarity);
   }
-  recalculateKnowledge();
-  const linkedChanges = new Set();
-  for (const secret of state.secrets) {
-    if (state.matrix[to] && state.matrix[to][secret]) {
-      for (const cell of propagateSharedKnowledge(to, secret)) linkedChanges.add(cell);
-    }
-    if (mutual && state.matrix[from] && state.matrix[from][secret]) {
-      for (const cell of propagateSharedKnowledge(from, secret)) linkedChanges.add(cell);
-    }
-  }
   saveState();
   refresh();
-  showLinkedHighlights(linkedChanges);
   setStatus(mutual
-    ? `相互の感情を${result1 === "更新" || result2 === "更新" ? "更新" : "登録"}しました。情報共有で○になったマスを反映しました。`
-    : `一方通行の感情を${result1}しました。情報共有で○になったマスを反映しました。`);
+    ? `相互の感情を${result1 === "更新" || result2 === "更新" ? "更新" : "登録"}しました。`
+    : `一方通行の感情を${result1}しました。`);
 });
 
 document.querySelectorAll('input[name="imageTitleMode"]').forEach(radio => {
@@ -1554,6 +1614,7 @@ document.getElementById("importData").addEventListener("change", event => {
       if (!Array.isArray(state.publicSecrets)) {
         state.publicSecrets = [];
       }
+      if (typeof state.autoShareKnowledge !== "boolean") state.autoShareKnowledge = true;
       normalizeDirectMatrix();
       normalizeEmotions();
       normalizeCycleScene();
@@ -1608,6 +1669,7 @@ document.getElementById("resetData").addEventListener("click", () => {
       "PC6の秘密": "PC6"
     },
     publicSecrets: [],
+    autoShareKnowledge: true,
     matrix: {},
     directMatrix: {},
       emotions: [],
