@@ -1,0 +1,36 @@
+{
+  "name": "shinobigami-secret-matrix",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node scripts/serve.cjs",
+    "test": "playwright test --project=chromium",
+    "test:headed": "playwright test --headed --project=chromium",
+    "test:debug": "playwright test --debug --project=chromium",
+    "test:ui": "playwright test --ui --project=chromium",
+    "test:v8": "playwright test --project=v8",
+    "test:all": "playwright test --project=chromium --project=v8",
+    "test:examples": "playwright test --project=examples",
+    "test:video": "node scripts/test-video.cjs --project=chromium",
+    "test:report": "playwright show-report",
+    "test:trace": "playwright show-trace",
+    "test:install": "playwright install chromium"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/choration-del/shinobigami-secret-matrix.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/choration-del/shinobigami-secret-matrix/issues"
+  },
+  "homepage": "https://github.com/choration-del/shinobigami-secret-matrix#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^26.6.2"
+  }
+}
